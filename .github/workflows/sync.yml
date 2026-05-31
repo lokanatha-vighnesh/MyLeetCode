@@ -3,44 +3,17 @@ name: Sync Leetcode
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 8 * * *' # Runs automatically every day at 8 AM UTC
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Standard sync using the explicit stable version v1.7.0
-      - name: Sync LeetCode Solutions
+      - name: Sync
         uses: joshcai/leetcode-sync@v1.7.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           leetcode-csrf-token: ${{ secrets.LEETCODE_TOKEN }}
           leetcode-session: ${{ secrets.LEETCODE_SESSION }}
-          destination-folder: 'solutions/${{ difficulty }}'
-
-      # Step 2: Flatten the subfolders so you don't have separate folders for each question
-      - name: Flatten and Clean Folders
-        run: |
-          cd solutions
-          for diff in Easy Medium Hard; do
-            if [ -d "$diff" ]; then
-              cd "$diff"
-              find . -mindepth 2 -type f | while read -r file; do
-                folder_name=$(echo "$file" | cut -d'/' -f2)
-                ext="${file##*.}"
-                mv "$file" "./${folder_name}.${ext}"
-              done
-              find . -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
-              cd ..
-            fi
-          done
-
-      # Step 3: Commit and push the clean flat files back to your repository
-      - name: Commit and Push Cleaned Structure
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git add .
-          git diff-index --quiet HEAD || git commit -m "Flattened leetcode solutions by difficulty"
-          git push
+          destination-folder: 'solutions'
