@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Sync
-        uses: joshcai/leetcode-sync@v1.7.0
+      - name: Sync LeetCode Solutions
+        uses: xidongw/leetcode-sync-plus@v1.1.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           leetcode-csrf-token: ${{ secrets.LEETCODE_TOKEN }}
           leetcode-session: ${{ secrets.LEETCODE_SESSION }}
-          destination-folder: 'solutions/${{ difficulty }}'
-          filename-format: '${{ id }}-${{ titleSlug }}' # <-- This forces flat files instead of subfolders
+          # The '$' is placed outside the braces to stop GitHub from throwing an error
+          output-file-path: 'solutions/$`{{ difficulty }}`/$`{{ id }}`-$`{{ titleSlug }}`.$`{{ ext }}`'
