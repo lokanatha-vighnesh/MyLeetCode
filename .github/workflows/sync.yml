@@ -8,13 +8,133 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 1: Sync into temporary folder (default structure)
       - name: Sync LeetCode Solutions
-        uses: xidongw/leetcode-sync-plus@v1.1.1
+        uses: joshcai/leetcode-sync@v1.7.0
+        continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           leetcode-csrf-token: ${{ secrets.LEETCODE_TOKEN }}
           leetcode-session: ${{ secrets.LEETCODE_SESSION }}
-          # The '$' is placed outside the braces to stop GitHub from throwing an error
-          output-file-path: 'solutions/$`{{ difficulty }}`/$`{{ id }}`-$`{{ titleSlug }}`.$`{{ ext }}`'
+          destination-folder: 'temp_sync'
+
+      # Step 2: Fetch problem difficulties from LeetCode
+      - name: Fetch problem difficulties
+        run: |
+          curl -L -X POST 'https://leetcode.com/graphql/' \
+            -H 'Content-Type: application/json' \
+            --data-raw '{
+              "query": "query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) { problemsetQuestionList: questionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) { questions: data { difficulty titleSlug frontendQuestionId } } }",
+              "variables": { "categorySlug": "", "skip": 0, "limit": 4000, "filters": {} }
+            }' > problems.json
+
+      # Step 3: Create difficulty folders and flatten structure
+      - name: Organize by difficulty and flatten
+        run: |
+          # Create difficulty folders
+          mkdir -p solutions/Easy solutions/Medium solutions/Hard
+          
+          # Create Python script to reorganize
+          python3 << 'PYSCRIPT'
+          import json
+          import os
+          import re
+          import shutil
+          
+          # Load problem difficulties
+          with open('problems.json', 'r') as f:
+              data = json.load(f)
+          
+          # Create difficulty mapping
+          diff_map = {}
+          for q in data.get('data', {}).get('problemsetQuestionList', {}).get('questions', []):
+              slug = q.get('titleSlug')
+              difficulty = q.get('difficulty')
+              if slug and difficulty:
+                  diff_map[slug] = difficulty
+          
+          # Process each synced problem folder
+          if os.path.exists('temp_sync'):
+              for folder in os.listdir('temp_sync'):
+                  folder_path = os.path.join('temp_sync', folder)
+                  if not os.path.isdir(folder_path):
+                      continue
+                  
+                  # Extract problem slug from folder name (e.g., "1-two-sum")
+                  match = re.match(r'^\d+-(.+)$', folder)
+                  if match:
+                      slug = match.group(1)
+                      problem_num = folder.split('-')[0]
+                  else:
+                      slug = folder
+                      problem_num = "unknown"
+                  
+                  # Get difficulty
+                  difficulty = diff_map.get(slug, "Unknown")
+                  if difficulty == "Unknown":
+                      # Try case-insensitive match
+                      for known_slug in diff_map:
+                          if known_slug.lower() == slug.lower():
+                              difficulty = diff_map[known_slug]
+                              slug = known_slug
+                              break
+                  
+                  if difficulty == "Unknown":
+                      print(f"Warning: No difficulty for {slug}, skipping")
+                      continue
+                  
+                  # Move all solution files to flattened structure
+                  for filename in os.listdir(folder_path):
+                      file_path = os.path.join(folder_path, filename)
+                      if os.path.isfile(file_path):
+                          # Get file extension
+                          ext = filename.split('.')[-1]
+                          # New filename: {problem-number}-{slug}.{ext}
+                          new_filename = f"{problem_num}-{slug}.{ext}"
+                          target_path = os.path.join('solutions', difficulty, new_filename)
+                          
+                          # Handle duplicates
+                          counter = 1
+                          while os.path.exists(target_path):
+                              name_without_ext = new_filename.replace(f'.{ext}', '')
+                              target_path = os.path.join('solutions', difficulty, f"{name_without_ext}_{counter}.{ext}")
+                              counter += 1
+                          
+                          shutil.move(file_path, target_path)
+                          print(f"Moved: {folder}/{filename} -> solutions/{difficulty}/{os.path.basename(target_path)}")
+              
+              # Remove temp directory
+              shutil.rmtree('temp_sync')
+              print("✓ Reorganization complete")
+          else:
+              print("No temp_sync directory found")
+          
+          # Generate README
+          readme = "# LeetCode Solutions\n\nOrganized by difficulty with flat file structure:\n\n"
+          for diff in ['Easy', 'Medium', 'Hard']:
+              diff_path = f'solutions/{diff}'
+              if os.path.exists(diff_path):
+                  count = len([f for f in os.listdir(diff_path) if os.path.isfile(os.path.join(diff_path, f))])
+                  readme += f"\n- **{diff}**: {count} solutions"
+          
+          with open('solutions/README.md', 'w') as f:
+              f.write(readme)
+          
+          PYSCRIPT
+
+      # Step 4: Commit and push
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add solutions/
+          git add temp_sync/ || true
+          git diff --staged --quiet || (git commit -m "🔄 Sync and organize LeetCode solutions by difficulty" && git push)
