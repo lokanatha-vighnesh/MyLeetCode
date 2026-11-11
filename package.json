@@ -4,7 +4,7 @@
   "description": "Automatically update LeetCode CSRF token and session cookie values in GitHub repository secrets every 2 weeks",
   "main": "fetchLeetCodeCookies.js",
   "scripts": {
-    "start": "node fetchLeetCodeCookies.js"
+    "start": "node script.js"
   },
   "repository": {
     "type": "git",
