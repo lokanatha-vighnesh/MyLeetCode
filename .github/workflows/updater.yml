@@ -1,7 +1,6 @@
 name: Update Leetcode Cookies
 
 on:
-  workflow_dispatch:
   schedule:
     - cron: "0 0 */14 * *" # Run every 2 weeks
 
@@ -11,7 +10,7 @@ jobs:
 
     steps:
       - name: Update Leetcode cookies
-        uses: vishrutkmr7/UpdateLCCookies@initial
+        uses: vishrutkmr7/UpdateLCCookies@v1.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           leetcode-email: ${{ secrets.LEETCODE_EMAIL }}
